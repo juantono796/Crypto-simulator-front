@@ -1,4 +1,5 @@
-// app-realtime.js - Versión con datos REALES de CoinGecko API
+// app-realtime.js - VERSIÓN MEJORADA con datos de CoinGecko
+// Mejor manejo de errores y diagnóstico
 
 class TradingBot {
     constructor() {
@@ -17,15 +18,13 @@ class TradingBot {
         this.totalCandles = 0;
         this.startTime = null;
         
-        // Nuevos atributos para datos reales
         this.apiUpdateInterval = null;
         this.lastApiUpdate = 0;
-        this.apiRateLimit = 60000; // 1 minuto entre llamadas (safe para CoinGecko)
+        this.apiRateLimit = 65000; // 65 segundos (safe)
+        this.usingRealData = false;
         
         this.config = {};
         this.setupConfigListeners();
-        
-        // Inicializar con datos reales
         this.initializeRealCryptoData();
     }
 
@@ -37,108 +36,128 @@ class TradingBot {
     }
 
     async initializeRealCryptoData() {
-        this.log('🔄 Cargando datos reales del mercado...', 'info');
+        this.log('🔄 Conectando a CoinGecko API...', 'info');
         
         try {
             await this.fetchRealMarketData();
-            this.log('✅ Datos reales cargados desde CoinGecko API', 'success');
+            this.usingRealData = true;
+            this.log('✅ Datos REALES cargados desde CoinGecko', 'success');
         } catch (error) {
-            this.log('⚠️ Error al cargar datos reales, usando modo simulado', 'warning');
-            console.error('API Error:', error);
-            // Fallback a datos simulados si la API falla
+            this.usingRealData = false;
+            this.log(`⚠️ Error CoinGecko: ${error.message}`, 'warning');
+            this.log('⚠️ Usando modo SIMULADO', 'warning');
+            console.error('Detalles del error:', error);
             this.initializeSimulatedData();
         }
     }
 
     async fetchRealMarketData() {
-        // Evitar llamadas muy frecuentes a la API
         const now = Date.now();
         if (now - this.lastApiUpdate < this.apiRateLimit) {
-            console.log('Rate limit: esperando antes de próxima llamada API');
+            console.log('⏳ Rate limit: esperando...');
             return;
         }
 
-        const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&page=1&sparkline=false&price_change_percentage=1h,24h';
+        // URL de CoinGecko con parámetros correctos
+        const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&page=1&sparkline=false&locale=en';
         
-        const response = await fetch(url);
+        console.log('📡 Fetching:', url);
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        this.lastApiUpdate = now;
-        
-        // Transformar datos de CoinGecko a nuestro formato
-        this.cryptoData = data.map(coin => {
-            const existingCrypto = this.cryptoData.find(c => c.id === coin.id);
-            const priceHistory = existingCrypto?.priceHistory || [];
-            const volumeHistory = existingCrypto?.volumeHistory || [];
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
             
-            // Agregar precio actual al histórico
-            priceHistory.push(coin.current_price);
-            if (priceHistory.length > 60) priceHistory.shift();
+            console.log('📊 Response status:', response.status);
             
-            // Agregar volumen actual al histórico
-            volumeHistory.push(coin.total_volume);
-            if (volumeHistory.length > 60) volumeHistory.shift();
-            
-            // Si no hay suficiente histórico, generarlo basado en el precio actual
-            while (priceHistory.length < 60) {
-                const randomChange = (Math.random() - 0.5) * 0.02; // ±1%
-                const prevPrice = priceHistory.length > 0 ? priceHistory[0] : coin.current_price;
-                priceHistory.unshift(prevPrice * (1 + randomChange));
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Error response:', errorText);
+                throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
             }
             
-            while (volumeHistory.length < 60) {
-                const randomChange = (Math.random() - 0.5) * 0.1; // ±5%
-                const prevVolume = volumeHistory.length > 0 ? volumeHistory[0] : coin.total_volume;
-                volumeHistory.unshift(prevVolume * (1 + randomChange));
-            }
+            const data = await response.json();
+            console.log('✅ Datos recibidos:', data.length, 'criptos');
             
-            return {
-                id: coin.id,
-                symbol: coin.symbol.toUpperCase(),
-                name: coin.name,
-                currentPrice: coin.current_price,
-                priceHistory: priceHistory,
-                volumeHistory: volumeHistory,
-                change24h: coin.price_change_percentage_24h || 0,
-                change1h: coin.price_change_percentage_1h_in_currency || 0,
-                marketCap: coin.market_cap,
-                // Estimar volatilidad basada en cambios históricos
-                volatility: Math.abs(coin.price_change_percentage_24h || 2) / 100
-            };
-        });
+            this.lastApiUpdate = now;
+            
+            // Transformar datos
+            this.cryptoData = data.map(coin => {
+                const existingCrypto = this.cryptoData.find(c => c.id === coin.id);
+                const priceHistory = existingCrypto?.priceHistory || [];
+                const volumeHistory = existingCrypto?.volumeHistory || [];
+                
+                priceHistory.push(coin.current_price);
+                if (priceHistory.length > 60) priceHistory.shift();
+                
+                volumeHistory.push(coin.total_volume);
+                if (volumeHistory.length > 60) volumeHistory.shift();
+                
+                // Generar histórico si falta
+                while (priceHistory.length < 60) {
+                    const randomChange = (Math.random() - 0.5) * 0.02;
+                    const prevPrice = priceHistory.length > 0 ? priceHistory[0] : coin.current_price;
+                    priceHistory.unshift(prevPrice * (1 + randomChange));
+                }
+                
+                while (volumeHistory.length < 60) {
+                    const randomChange = (Math.random() - 0.5) * 0.1;
+                    const prevVolume = volumeHistory.length > 0 ? volumeHistory[0] : coin.total_volume;
+                    volumeHistory.unshift(prevVolume * (1 + randomChange));
+                }
+                
+                return {
+                    id: coin.id,
+                    symbol: coin.symbol.toUpperCase(),
+                    name: coin.name,
+                    currentPrice: coin.current_price,
+                    priceHistory: priceHistory,
+                    volumeHistory: volumeHistory,
+                    change24h: coin.price_change_percentage_24h || 0,
+                    change1h: coin.price_change_percentage_1h_in_currency || 0,
+                    marketCap: coin.market_cap,
+                    volatility: Math.abs(coin.price_change_percentage_24h || 0) / 100,
+                };
+            });
 
-        this.calculateIndicators();
-        this.renderCryptoList();
+            this.calculateIndicators();
+            this.renderCryptoList();
+            
+        } catch (error) {
+            console.error('💥 Fetch error:', error);
+            throw error;
+        }
     }
 
     initializeSimulatedData() {
         const baseData = [
-            { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', basePrice: 42000, volatility: 0.02 },
-            { id: 'ethereum', symbol: 'ETH', name: 'Ethereum', basePrice: 2200, volatility: 0.03 },
-            { id: 'binance-coin', symbol: 'BNB', name: 'BNB', basePrice: 310, volatility: 0.025 },
-            { id: 'solana', symbol: 'SOL', name: 'Solana', basePrice: 98, volatility: 0.04 },
-            { id: 'ripple', symbol: 'XRP', name: 'XRP', basePrice: 0.52, volatility: 0.035 },
-            { id: 'cardano', symbol: 'ADA', name: 'Cardano', basePrice: 0.48, volatility: 0.03 },
-            { id: 'avalanche-2', symbol: 'AVAX', name: 'Avalanche', basePrice: 36, volatility: 0.045 },
-            { id: 'dogecoin', symbol: 'DOGE', name: 'Dogecoin', basePrice: 0.08, volatility: 0.05 },
-            { id: 'polkadot', symbol: 'DOT', name: 'Polkadot', basePrice: 7.2, volatility: 0.035 },
-            { id: 'polygon', symbol: 'MATIC', name: 'Polygon', basePrice: 0.82, volatility: 0.04 },
-            { id: 'chainlink', symbol: 'LINK', name: 'Chainlink', basePrice: 14.5, volatility: 0.03 },
-            { id: 'litecoin', symbol: 'LTC', name: 'Litecoin', basePrice: 73, volatility: 0.025 },
-            { id: 'uniswap', symbol: 'UNI', name: 'Uniswap', basePrice: 6.8, volatility: 0.04 },
-            { id: 'cosmos', symbol: 'ATOM', name: 'Cosmos', basePrice: 10.2, volatility: 0.035 }
+            { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin', basePrice: 43000, volatility: 0.02 },
+            { id: 'ethereum', symbol: 'ETH', name: 'Ethereum', basePrice: 2250, volatility: 0.03 },
+            { id: 'binancecoin', symbol: 'BNB', name: 'BNB', basePrice: 315, volatility: 0.025 },
+            { id: 'solana', symbol: 'SOL', name: 'Solana', basePrice: 102, volatility: 0.04 },
+            { id: 'ripple', symbol: 'XRP', name: 'XRP', basePrice: 0.54, volatility: 0.035 },
+            { id: 'cardano', symbol: 'ADA', name: 'Cardano', basePrice: 0.49, volatility: 0.03 },
+            { id: 'avalanche-2', symbol: 'AVAX', name: 'Avalanche', basePrice: 37, volatility: 0.045 },
+            { id: 'dogecoin', symbol: 'DOGE', name: 'Dogecoin', basePrice: 0.082, volatility: 0.05 },
+            { id: 'polkadot', symbol: 'DOT', name: 'Polkadot', basePrice: 7.4, volatility: 0.035 },
+            { id: 'matic-network', symbol: 'MATIC', name: 'Polygon', basePrice: 0.85, volatility: 0.04 },
+            { id: 'chainlink', symbol: 'LINK', name: 'Chainlink', basePrice: 15, volatility: 0.03 },
+            { id: 'litecoin', symbol: 'LTC', name: 'Litecoin', basePrice: 75, volatility: 0.025 },
+            { id: 'uniswap', symbol: 'UNI', name: 'Uniswap', basePrice: 7, volatility: 0.04 },
+            { id: 'cosmos', symbol: 'ATOM', name: 'Cosmos', basePrice: 10.5, volatility: 0.035 },
+            { id: 'shiba-inu', symbol: 'SHIB', name: 'Shiba Inu', basePrice: 0.000009, volatility: 0.06 }
         ];
 
         this.cryptoData = baseData.map(crypto => ({
             ...crypto,
             currentPrice: crypto.basePrice,
             priceHistory: this.generatePriceHistory(crypto.basePrice, crypto.volatility, 60),
-            volumeHistory: Array(60).fill(0).map(() => crypto.basePrice * 1000000 * (0.8 + Math.random() * 0.4)),
-            change24h: (Math.random() - 0.5) * 10
+            volumeHistory: Array(60).fill(0).map(() => crypto.basePrice * 5000000 * (0.8 + Math.random() * 0.4)),
+            change24h: (Math.random() - 0.5) * 10,
+            change1h: (Math.random() - 0.5) * 3
         }));
 
         this.calculateIndicators();
@@ -156,13 +175,12 @@ class TradingBot {
     }
 
     updatePrices() {
-        // Si estamos en modo simulado, actualizar precios sintéticamente
-        if (this.cryptoData.length > 0 && !this.cryptoData[0].currentPrice) {
-            // Datos reales: NO simular cambios, solo cuando llegue nueva data de API
+        // Si estamos usando datos reales, NO actualizar localmente
+        if (this.usingRealData) {
             return;
         }
 
-        // Modo simulado: generar cambios
+        // Modo simulado: generar cambios sintéticos
         this.cryptoData.forEach(crypto => {
             if (crypto.volatility) {
                 const change = (Math.random() - 0.5) * crypto.volatility * 2;
@@ -173,7 +191,7 @@ class TradingBot {
                     crypto.priceHistory.shift();
                 }
 
-                const baseVolume = crypto.basePrice * 1000000;
+                const baseVolume = crypto.basePrice * 5000000;
                 const newVolume = baseVolume * (0.8 + Math.random() * 0.4);
                 crypto.volumeHistory.push(newVolume);
                 if (crypto.volumeHistory.length > 60) {
@@ -213,7 +231,9 @@ class TradingBot {
             50: 'Máximo'
         };
 
-        this.log(`⚙️ Config: EMA${this.config.emaFast}/${this.config.emaSlow}, RSI(${this.config.rsiMin}-${this.config.rsiMax}), TP1=${(this.config.tp1*100).toFixed(1)}%, TP2=${(this.config.tp2*100).toFixed(1)}% | Velocidad: ${speedLabels[this.config.timeSpeed]} | Modo: ${this.cryptoData[0]?.currentPrice ? 'REAL' : 'SIMULADO'}`, 'success');
+        const dataSource = this.usingRealData ? 'COINGECKO (Real)' : 'SIMULADO';
+        
+        this.log(`⚙️ Config: EMA${this.config.emaFast}/${this.config.emaSlow}, RSI(${this.config.rsiMin}-${this.config.rsiMax}), TP1=${(this.config.tp1*100).toFixed(1)}%, TP2=${(this.config.tp2*100).toFixed(1)}% | Velocidad: ${speedLabels[this.config.timeSpeed]} | Datos: ${dataSource}`, 'success');
     }
 
     disableConfig() {
@@ -300,11 +320,16 @@ class TradingBot {
             const signal = crypto.signal;
             const hasPosition = this.investments.some(inv => inv.cryptoId === crypto.id);
             
+            let priceDecimals = 2;
+            if (crypto.currentPrice < 0.01) priceDecimals = 8;
+            else if (crypto.currentPrice < 1) priceDecimals = 6;
+            else if (crypto.currentPrice < 10) priceDecimals = 4;
+            
             return `
                 <div class="crypto-item">
                     <div>
                         <div class="crypto-name">${crypto.symbol}</div>
-                        <div class="crypto-symbol">$${crypto.currentPrice.toFixed(crypto.currentPrice < 1 ? 6 : 2)}</div>
+                        <div class="crypto-symbol">$${crypto.currentPrice.toFixed(priceDecimals)}</div>
                         <div class="crypto-indicators">
                             <div class="indicator">
                                 <span class="indicator-label">EMA:</span>
@@ -351,21 +376,22 @@ class TradingBot {
         
         this.log('🤖 Bot activado - Escaneando mercado...', 'success');
         
-        // Interval para la estrategia
         this.updateInterval = setInterval(() => {
             this.runStrategy();
             this.updateSimulationTime();
         }, this.config.timeSpeed);
         
-        // Interval para actualizar datos reales de la API (cada 1 minuto)
-        this.apiUpdateInterval = setInterval(async () => {
-            try {
-                await this.fetchRealMarketData();
-                this.log('🔄 Datos de mercado actualizados', 'info');
-            } catch (error) {
-                console.error('Error actualizando datos:', error);
-            }
-        }, this.apiRateLimit);
+        // Si estamos usando datos reales, actualizar cada 65 segundos
+        if (this.usingRealData) {
+            this.apiUpdateInterval = setInterval(async () => {
+                try {
+                    await this.fetchRealMarketData();
+                    this.log('🔄 Datos actualizados desde CoinGecko', 'info');
+                } catch (error) {
+                    console.error('Error actualizando:', error);
+                }
+            }, this.apiRateLimit);
+        }
         
         this.runStrategy();
     }
@@ -414,10 +440,6 @@ class TradingBot {
             timeDisplay.innerHTML = `📅 Tiempo simulado: ${days} días, ${hours}h (${this.totalCandles} velas)<br>⏱️ Tiempo real: ${elapsedReal.toFixed(1)}s`;
         }
     }
-
-    // ... (resto del código igual: checkPositions, lookForEntry, openPosition, closePosition, etc.)
-    // Por brevedad, no repito todo el código que ya está en app.js
-    // El resto de las funciones permanecen exactamente iguales
 
     checkPositions() {
         for (let position of [...this.investments]) {
@@ -540,8 +562,10 @@ class TradingBot {
 
         this.investments.push(position);
 
+        let priceDecimals = crypto.currentPrice < 1 ? 6 : 2;
+        
         this.log(
-            `✅ COMPRA: ${positionSize.toFixed(6)} ${crypto.symbol} @ $${crypto.currentPrice.toFixed(6)} | Stop: $${stopPrice.toFixed(6)}`,
+            `✅ COMPRA: ${positionSize.toFixed(6)} ${crypto.symbol} @ $${crypto.currentPrice.toFixed(priceDecimals)} | Stop: $${stopPrice.toFixed(priceDecimals)}`,
             'success'
         );
 
@@ -575,8 +599,11 @@ class TradingBot {
             logType = 'warning';
         }
 
+        const crypto = this.cryptoData.find(c => c.id === position.cryptoId);
+        let priceDecimals = crypto?.currentPrice < 1 ? 6 : 2;
+
         this.log(
-            `${emoji} VENTA ${(percentage*100).toFixed(0)}% (${reason}): ${amountToSell.toFixed(6)} ${position.symbol} @ $${position.currentPrice.toFixed(6)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${(position.profitPct*100).toFixed(2)}%)`,
+            `${emoji} VENTA ${(percentage*100).toFixed(0)}% (${reason}): ${amountToSell.toFixed(6)} ${position.symbol} @ $${position.currentPrice.toFixed(priceDecimals)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${(position.profitPct*100).toFixed(2)}%)`,
             logType
         );
 
@@ -598,7 +625,11 @@ class TradingBot {
             return;
         }
 
-        listElement.innerHTML = this.investments.map(pos => `
+        listElement.innerHTML = this.investments.map(pos => {
+            const crypto = this.cryptoData.find(c => c.id === pos.cryptoId);
+            let priceDecimals = crypto?.currentPrice < 1 ? 6 : 2;
+            
+            return `
             <div class="investment-card">
                 <div class="investment-header">
                     <div class="investment-name">${pos.symbol}</div>
@@ -609,11 +640,11 @@ class TradingBot {
                 <div class="investment-details">
                     <div class="detail-row">
                         <span class="detail-label">Entrada:</span>
-                        <span>$${pos.entryPrice.toFixed(6)}</span>
+                        <span>$${pos.entryPrice.toFixed(priceDecimals)}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Actual:</span>
-                        <span>$${pos.currentPrice.toFixed(6)}</span>
+                        <span>$${pos.currentPrice.toFixed(priceDecimals)}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Cantidad:</span>
@@ -639,11 +670,11 @@ class TradingBot {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Stop:</span>
-                        <span>$${(pos.trailingActive ? pos.trailingStop : pos.technicalStop).toFixed(6)}</span>
+                        <span>$${(pos.trailingActive ? pos.trailingStop : pos.technicalStop).toFixed(priceDecimals)}</span>
                     </div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
     }
 
     updateUI() {
