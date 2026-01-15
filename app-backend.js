@@ -2,7 +2,7 @@
 // 🚀 Datos REALES de Binance a través de tu propio backend
 
 // ⚙️ CONFIGURACIÓN: Cambia esta URL por tu backend deployado en Render
-const BACKEND_URL = 'https://crypto-bot-backend.onrender.com';
+const BACKEND_URL = 'https://crypto-simulator-back.onrender.com';
 // Ejemplo: 'https://crypto-bot-backend-abc123.onrender.com'
 
 class TradingBot {
