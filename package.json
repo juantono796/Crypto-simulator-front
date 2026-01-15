@@ -1,0 +1,33 @@
+{
+  "name": "crypto-trading-bot-simulator",
+  "version": "1.0.0",
+  "description": "Simulador profesional de trading de criptomonedas con análisis técnico avanzado",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx live-server ."
+  },
+  "keywords": [
+    "crypto",
+    "trading",
+    "bot",
+    "simulator",
+    "technical-analysis",
+    "ema",
+    "rsi",
+    "trailing-stop",
+    "cryptocurrency",
+    "bitcoin",
+    "ethereum"
+  ],
+  "author": "Tu Nombre",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tu-usuario/crypto-trading-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tu-usuario/crypto-trading-bot/issues"
+  },
+  "homepage": "https://github.com/tu-usuario/crypto-trading-bot#readme"
+}

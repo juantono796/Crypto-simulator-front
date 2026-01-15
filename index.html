@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Trading Bot - Simulador Profesional</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 CRYPTO TRADING BOT</h1>
+            <p class="subtitle">Análisis Técnico Profesional | EMA • RSI • Volumen • Trailing Stop</p>
+        </header>
+
+        <div class="dashboard">
+            <div class="stat-card">
+                <div class="stat-label">💰 Capital Total</div>
+                <div class="stat-value" id="totalBalance">$1,000.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">💵 Efectivo</div>
+                <div class="stat-value" id="cashBalance">$1,000.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📊 Posiciones</div>
+                <div class="stat-value" id="activeInvestments">0/3</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📈 P&L Total</div>
+                <div class="stat-value positive" id="totalProfits">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">✅ Trades Ganadores</div>
+                <div class="stat-value" id="successTrades">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">❌ Trades Perdedores</div>
+                <div class="stat-value" id="lossTrades">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🔄 Trades On Hold</div>
+                <div class="stat-value" id="onHoldTrades">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📉 Win Rate</div>
+                <div class="stat-value" id="winRate">0%</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- CONFIGURACIÓN -->
+            <div class="section">
+                <div class="section-title">⚙️ Configuración</div>
+                
+                <div class="config-panel">
+                    <div class="config-title">📊 Indicadores</div>
+                    <div class="config-row">
+                        <label class="config-label">EMA Rápida</label>
+                        <input type="number" id="emaFast" value="20" min="5" max="50">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">EMA Lenta</label>
+                        <input type="number" id="emaSlow" value="50" min="20" max="200">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">RSI Período</label>
+                        <input type="number" id="rsiPeriod" value="14" min="5" max="30">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">RSI Mín</label>
+                        <input type="number" id="rsiMin" value="50" min="30" max="70">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">RSI Máx</label>
+                        <input type="number" id="rsiMax" value="70" min="50" max="90">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">Volumen Mult.</label>
+                        <input type="number" id="volumeMult" value="1.2" min="1" max="3" step="0.1">
+                    </div>
+                </div>
+
+                <div class="config-panel">
+                    <div class="config-title">🛑 Stop Loss</div>
+                    <div class="config-row">
+                        <label class="config-label">Tipo</label>
+                        <select id="stopType">
+                            <option value="fixed">Fijo (%)</option>
+                            <option value="technical">Técnico (mín 10 velas)</option>
+                        </select>
+                    </div>
+                    <div class="config-row" id="stopFixedRow">
+                        <label class="config-label">Stop Loss (%)</label>
+                        <input type="number" id="stopLossPct" value="2" min="0.5" max="10" step="0.5">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">Timeout (velas)</label>
+                        <input type="number" id="timeoutCandles" value="30" min="5" max="100" step="5">
+                    </div>
+                </div>
+
+                <div class="config-panel">
+                    <div class="config-title">🎯 Take Profit</div>
+                    <div class="config-row">
+                        <label class="config-label">TP1 (%) - Vende 50%</label>
+                        <input type="number" id="tp1" value="2" min="0.5" max="10" step="0.5">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">TP2 (%) - Vende 100%</label>
+                        <input type="number" id="tp2" value="4" min="1" max="20" step="0.5">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">Trailing (%)</label>
+                        <input type="number" id="trailingPct" value="2" min="0.5" max="5" step="0.5">
+                    </div>
+                </div>
+
+                <div class="config-panel">
+                    <div class="config-title">💼 Gestión</div>
+                    <div class="config-row">
+                        <label class="config-label">Riesgo por Trade (%)</label>
+                        <input type="number" id="riskPct" value="1" min="0.5" max="5" step="0.5">
+                    </div>
+                    <div class="config-row">
+                        <label class="config-label">Máx Posiciones</label>
+                        <input type="number" id="maxPositions" value="3" min="1" max="10">
+                    </div>
+                </div>
+
+                <div class="config-panel" style="background: rgba(168, 85, 247, 0.05); border-color: rgba(168, 85, 247, 0.2);">
+                    <div class="config-title" style="color: var(--accent-purple);">⚡ Acelerador de Tiempo</div>
+                    <div class="config-row">
+                        <label class="config-label">Velocidad de Simulación</label>
+                        <select id="timeSpeed">
+                            <option value="3000">⏱️ Tiempo Real (1 vela = 3s)</option>
+                            <option value="1000">🏃 Rápido (1 vela = 1s)</option>
+                            <option value="500" selected>⚡ Muy Rápido (1 vela = 0.5s)</option>
+                            <option value="100">🚀 Ultra Rápido (1 vela = 0.1s)</option>
+                            <option value="50">💫 Máximo (1 vela = 0.05s)</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: 12px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 0.7rem; color: var(--text-secondary);">
+                        <strong style="color: var(--accent-purple);">📊 Equivalencias:</strong><br>
+                        • Ultra Rápido: ~1 mes en 50 segundos<br>
+                        • Máximo: ~1 mes en 25 segundos<br>
+                        <div id="simulationTime" style="margin-top: 6px; color: var(--accent-green); font-weight: 700;"></div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn-primary" id="startBtn">▶️ Iniciar</button>
+                    <button class="btn-secondary" id="stopBtn" disabled>⏸️ Detener</button>
+                </div>
+                <button class="btn-secondary" id="resetBtn" style="width: 100%; margin-top: 10px;">🔄 Reiniciar</button>
+            </div>
+
+            <!-- MERCADO -->
+            <div>
+                <div class="section">
+                    <div class="section-title">📈 Análisis de Mercado</div>
+                    <div class="scroll-container" id="cryptoList"></div>
+                </div>
+
+                <div class="section" style="margin-top: 20px;">
+                    <div class="section-title">📊 Posiciones Activas</div>
+                    <div id="investmentsList">
+                        <p style="color: var(--text-secondary); text-align: center; padding: 20px; font-size: 0.85rem;">
+                            Sin posiciones abiertas
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOG -->
+            <div class="section">
+                <div class="section-title">📜 Registro</div>
+                <div class="scroll-container" id="activityLog"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
