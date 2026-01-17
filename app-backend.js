@@ -2,7 +2,7 @@
 // 🚀 Datos REALES de Binance a través de tu propio backend
 
 // ⚙️ CONFIGURACIÓN: Cambia esta URL por tu backend deployado en Render
-const BACKEND_URL = 'https://crypto-simulator-back.onrender.com';
+const BACKEND_URL = 'https://crypto-bot-backend.onrender.com';
 // Ejemplo: 'https://crypto-bot-backend-abc123.onrender.com'
 
 class TradingBot {
@@ -83,7 +83,7 @@ class TradingBot {
         }
 
         try {
-            const url = `${this.backendUrl}/api/crypto/markets`;
+            const url = `${this.backendUrl}/api/binance/ticker`;
             
             console.log(`📡 Fetching from backend: ${url}`);
             
@@ -102,14 +102,14 @@ class TradingBot {
             this.lastApiUpdate = now;
             const data = result.data;
             
-            // Transformar datos de CoinGecko a nuestro formato
-            this.cryptoData = data.map(coin => {
-                const existingCrypto = this.cryptoData.find(c => c.id === coin.id);
+            // Transformar datos de Binance.US a nuestro formato
+            this.cryptoData = data.map(ticker => {
+                const existingCrypto = this.cryptoData.find(c => c.id === ticker.symbol);
                 const priceHistory = existingCrypto?.priceHistory || [];
                 const volumeHistory = existingCrypto?.volumeHistory || [];
                 
-                const currentPrice = coin.current_price;
-                const volume = coin.total_volume;
+                const currentPrice = parseFloat(ticker.lastPrice);
+                const volume = parseFloat(ticker.quoteVolume);
                 
                 // Agregar precio actual al histórico
                 priceHistory.push(currentPrice);
@@ -133,22 +133,22 @@ class TradingBot {
                 }
                 
                 return {
-                    id: coin.id,
-                    symbol: coin.symbol.toUpperCase(),
-                    name: coin.name,
+                    id: ticker.symbol,
+                    symbol: ticker.symbol.replace('USDT', ''),
+                    name: ticker.symbol.replace('USDT', ''),
                     currentPrice: currentPrice,
                     priceHistory: priceHistory,
                     volumeHistory: volumeHistory,
-                    change24h: coin.price_change_percentage_24h || 0,
-                    marketCap: coin.market_cap,
-                    volatility: Math.abs(coin.price_change_percentage_24h || 0) / 100,
+                    change24h: parseFloat(ticker.priceChangePercent),
+                    marketCap: volume * 100,
+                    volatility: Math.abs(parseFloat(ticker.priceChangePercent)) / 100,
                 };
             });
 
             this.calculateIndicators();
             this.renderCryptoList();
             
-            this.log(`✅ ${this.cryptoData.length} criptos actualizadas desde CoinGecko`, 'success');
+            this.log(`✅ ${this.cryptoData.length} pares actualizados desde Binance.US`, 'success');
             
         } catch (error) {
             console.error('Error fetching from backend:', error);
@@ -258,7 +258,7 @@ class TradingBot {
             50: 'Máximo'
         };
 
-        const dataSource = this.backendConnected ? 'COINGECKO (vía Backend)' : 'SIMULADO';
+        const dataSource = this.backendConnected ? 'BINANCE.US (vía Backend)' : 'SIMULADO';
         
         this.log(`⚙️ Config: EMA${this.config.emaFast}/${this.config.emaSlow}, RSI(${this.config.rsiMin}-${this.config.rsiMax}), TP1=${(this.config.tp1*100).toFixed(1)}%, TP2=${(this.config.tp2*100).toFixed(1)}% | Velocidad: ${speedLabels[this.config.timeSpeed]} | Fuente: ${dataSource}`, 'success');
     }
@@ -325,14 +325,36 @@ class TradingBot {
     }
 
     evaluateSignal(crypto) {
+        // Usar configuración dinámica del usuario
+        const rsiMin = this.config?.rsiMin || 50;
+        const rsiMax = this.config?.rsiMax || 70;
+        const volumeMult = this.config?.volumeMult || 1.2;
+        
         const conditions = {
             trend: crypto.ema20 > crypto.ema50,
             priceAboveEMA: crypto.currentPrice > crypto.ema20,
-            rsiGood: crypto.rsi >= 50 && crypto.rsi <= 70,
-            volumeGood: crypto.currentVolume > crypto.avgVolume * 1.2
+            rsiGood: crypto.rsi >= rsiMin && crypto.rsi <= rsiMax,
+            volumeGood: crypto.currentVolume > crypto.avgVolume * volumeMult
         };
 
         const allGood = Object.values(conditions).every(v => v);
+        
+        // DEBUG LOG (solo para primeras 3 criptos)
+        if (this.cryptoData.indexOf(crypto) < 3 && this.totalCandles % 20 === 0) {
+            console.log(`🔍 ${crypto.symbol}:`, {
+                signal: allGood ? 'BUY ✅' : 'WAIT ❌',
+                trend: conditions.trend ? '✅' : '❌',
+                priceAboveEMA: conditions.priceAboveEMA ? '✅' : '❌', 
+                rsiGood: conditions.rsiGood ? '✅' : '❌',
+                volumeGood: conditions.volumeGood ? '✅' : '❌',
+                values: {
+                    ema20: crypto.ema20?.toFixed(2),
+                    ema50: crypto.ema50?.toFixed(2),
+                    rsi: crypto.rsi?.toFixed(0),
+                    rsiRange: `${rsiMin}-${rsiMax}`
+                }
+            });
+        }
         
         return {
             type: allGood ? 'BUY' : 'WAIT',
@@ -576,6 +598,8 @@ class TradingBot {
     }
 
     openPosition(crypto) {
+        console.log(`🎯 INTENTANDO ABRIR POSICIÓN en ${crypto.symbol}...`);
+        
         const riskAmount = this.cashBalance * this.config.riskPct;
         let stopPrice;
         
@@ -595,7 +619,21 @@ class TradingBot {
         const commission = investAmount * this.commission;
         const netInvest = investAmount - commission;
         
-        if (netInvest < 1) return;
+        console.log(`💰 Cálculos de posición:`, {
+            cashBalance: this.cashBalance,
+            riskPct: this.config.riskPct,
+            riskAmount: riskAmount,
+            currentPrice: crypto.currentPrice,
+            stopPrice: stopPrice,
+            positionSize: positionSize,
+            investAmount: investAmount,
+            netInvest: netInvest
+        });
+        
+        if (netInvest < 1) {
+            console.warn(`⚠️ Inversión muy pequeña (${netInvest}), cancelando...`);
+            return;
+        }
 
         this.cashBalance -= investAmount;
 
@@ -621,6 +659,8 @@ class TradingBot {
         this.investments.push(position);
 
         let priceDecimals = crypto.currentPrice < 1 ? 6 : 2;
+        
+        console.log(`✅ POSICIÓN ABIERTA EXITOSAMENTE:`, position);
         
         this.log(
             `✅ COMPRA: ${positionSize.toFixed(6)} ${crypto.symbol} @ $${crypto.currentPrice.toFixed(priceDecimals)} | Stop: $${stopPrice.toFixed(priceDecimals)}`,
