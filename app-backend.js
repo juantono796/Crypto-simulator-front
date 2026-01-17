@@ -1,9 +1,9 @@
 // app-backend.js - Frontend conectado a Backend en Render
 // 🚀 Datos REALES de Binance a través de tu propio backend
 
-// ⚙️ CONFIGURACIÓN: Cambia esta URL por tu backend deployado en Render
-const BACKEND_URL = 'https://crypto-bot-backend.onrender.com';
-// Ejemplo: 'https://crypto-bot-backend-abc123.onrender.com'
+// ⚙️ CONFIGURACIÓN: URL de tu backend en Render
+const BACKEND_URL = 'https://crypto-simulator-back.onrender.com';
+// ↑ Esta es tu URL real del backend
 
 class TradingBot {
     constructor() {
@@ -43,14 +43,6 @@ class TradingBot {
 
     async initializeBackendConnection() {
         this.log('🔄 Conectando al backend...', 'info');
-        
-        // Verificar que el backend esté configurado
-        if (this.backendUrl === 'https://crypto-bot-backend.onrender.com') {
-            this.log('⚠️ IMPORTANTE: Configura BACKEND_URL en app-backend.js', 'warning');
-            this.log('⚠️ Usando datos simulados por ahora...', 'warning');
-            this.initializeSimulatedData();
-            return;
-        }
         
         try {
             // Health check del backend
