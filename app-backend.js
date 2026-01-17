@@ -83,7 +83,7 @@ class TradingBot {
         }
 
         try {
-            const url = `${this.backendUrl}/api/binance/ticker`;
+            const url = `${this.backendUrl}/api/crypto/markets`;
             
             console.log(`📡 Fetching from backend: ${url}`);
             
@@ -102,14 +102,14 @@ class TradingBot {
             this.lastApiUpdate = now;
             const data = result.data;
             
-            // Transformar datos del backend a nuestro formato
-            this.cryptoData = data.map(ticker => {
-                const existingCrypto = this.cryptoData.find(c => c.id === ticker.symbol);
+            // Transformar datos de CoinGecko a nuestro formato
+            this.cryptoData = data.map(coin => {
+                const existingCrypto = this.cryptoData.find(c => c.id === coin.id);
                 const priceHistory = existingCrypto?.priceHistory || [];
                 const volumeHistory = existingCrypto?.volumeHistory || [];
                 
-                const currentPrice = parseFloat(ticker.lastPrice);
-                const volume = parseFloat(ticker.quoteVolume);
+                const currentPrice = coin.current_price;
+                const volume = coin.total_volume;
                 
                 // Agregar precio actual al histórico
                 priceHistory.push(currentPrice);
@@ -133,25 +133,22 @@ class TradingBot {
                 }
                 
                 return {
-                    id: ticker.symbol,
-                    symbol: ticker.symbol.replace('USDT', ''),
-                    name: ticker.symbol.replace('USDT', ''),
+                    id: coin.id,
+                    symbol: coin.symbol.toUpperCase(),
+                    name: coin.name,
                     currentPrice: currentPrice,
                     priceHistory: priceHistory,
                     volumeHistory: volumeHistory,
-                    change24h: parseFloat(ticker.priceChangePercent),
-                    marketCap: volume * 100,
-                    volatility: Math.abs(parseFloat(ticker.priceChangePercent)) / 100,
-                    high24h: parseFloat(ticker.highPrice),
-                    low24h: parseFloat(ticker.lowPrice),
-                    trades24h: parseInt(ticker.count)
+                    change24h: coin.price_change_percentage_24h || 0,
+                    marketCap: coin.market_cap,
+                    volatility: Math.abs(coin.price_change_percentage_24h || 0) / 100,
                 };
             });
 
             this.calculateIndicators();
             this.renderCryptoList();
             
-            this.log(`✅ ${this.cryptoData.length} pares actualizados desde Binance`, 'success');
+            this.log(`✅ ${this.cryptoData.length} criptos actualizadas desde CoinGecko`, 'success');
             
         } catch (error) {
             console.error('Error fetching from backend:', error);
@@ -261,7 +258,7 @@ class TradingBot {
             50: 'Máximo'
         };
 
-        const dataSource = this.backendConnected ? 'BACKEND (Binance Real)' : 'SIMULADO';
+        const dataSource = this.backendConnected ? 'COINGECKO (vía Backend)' : 'SIMULADO';
         
         this.log(`⚙️ Config: EMA${this.config.emaFast}/${this.config.emaSlow}, RSI(${this.config.rsiMin}-${this.config.rsiMax}), TP1=${(this.config.tp1*100).toFixed(1)}%, TP2=${(this.config.tp2*100).toFixed(1)}% | Velocidad: ${speedLabels[this.config.timeSpeed]} | Fuente: ${dataSource}`, 'success');
     }
@@ -536,12 +533,44 @@ class TradingBot {
     }
 
     lookForEntry() {
+        // DEBUG: Mostrar por qué cada crypto no califica
+        const debugInfo = this.cryptoData.map(crypto => {
+            const hasPosition = this.investments.some(inv => inv.cryptoId === crypto.id);
+            return {
+                symbol: crypto.symbol,
+                signal: crypto.signal.type,
+                hasPosition: hasPosition,
+                conditions: crypto.signal.conditions,
+                price: crypto.currentPrice,
+                ema20: crypto.ema20?.toFixed(2),
+                ema50: crypto.ema50?.toFixed(2),
+                rsi: crypto.rsi?.toFixed(0)
+            };
+        });
+        
+        // Contar cuántas cumplen cada condición
+        const stats = {
+            total: this.cryptoData.length,
+            trend: debugInfo.filter(d => d.conditions.trend).length,
+            priceAboveEMA: debugInfo.filter(d => d.conditions.priceAboveEMA).length,
+            rsiGood: debugInfo.filter(d => d.conditions.rsiGood).length,
+            volumeGood: debugInfo.filter(d => d.conditions.volumeGood).length,
+            buySignals: debugInfo.filter(d => d.signal === 'BUY').length
+        };
+        
+        console.log('📊 Market Analysis:', stats);
+        
         const candidate = this.cryptoData.find(crypto => 
             crypto.signal.type === 'BUY' && 
             !this.investments.some(inv => inv.cryptoId === crypto.id)
         );
 
-        if (!candidate) return;
+        if (!candidate) {
+            if (this.totalCandles % 10 === 0) { // Log cada 10 velas
+                this.log(`⏳ Esperando señal... (${stats.buySignals} BUY de ${stats.total} | Trend: ${stats.trend}, RSI: ${stats.rsiGood}, Vol: ${stats.volumeGood})`, 'info');
+            }
+            return;
+        }
 
         this.openPosition(candidate);
     }
