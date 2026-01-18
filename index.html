@@ -14,6 +14,18 @@
             <p class="subtitle">Análisis Técnico Profesional | EMA • RSI • Volumen • Trailing Stop</p>
         </header>
 
+        <!-- TABS -->
+        <div class="tabs">
+            <button class="tab active" data-tab="manual" onclick="switchTab('manual')">
+                📊 Trading Manual
+            </button>
+            <button class="tab" data-tab="optimizer" onclick="switchTab('optimizer')">
+                🤖 Auto-Optimización
+            </button>
+        </div>
+
+        <!-- TAB 1: MANUAL TRADING (actual) -->
+        <div id="manual-tab" class="tab-content active">
         <div class="dashboard">
             <div class="stat-card">
                 <div class="stat-label">💰 Capital Total</div>
@@ -179,8 +191,85 @@
                 <div class="scroll-container" id="activityLog"></div>
             </div>
         </div>
+        </div>
+        <!-- FIN TAB MANUAL -->
+
+        <!-- TAB 2: AUTO-OPTIMIZACIÓN -->
+        <div id="optimizer-tab" class="tab-content">
+            <div id="optimizer-container"></div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="control-btn" id="optimizerStartBtn" onclick="startOptimizer()">
+                    ▶️ Iniciar Auto-Optimización
+                </button>
+                <button class="control-btn secondary" id="optimizerStopBtn" onclick="stopOptimizer()" disabled>
+                    ⏸️ Detener
+                </button>
+            </div>
+        </div>
+        <!-- FIN TAB OPTIMIZER -->
     </div>
 
+    <!-- Scripts -->
+    <script>
+        // Sistema de Tabs
+        function switchTab(tabName) {
+            // Ocultar todos los tabs
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Quitar active de todos los botones
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Activar el tab seleccionado
+            document.getElementById(tabName + '-tab').classList.add('active');
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        }
+        
+        // Variables globales para optimizer
+        let optimizerManager = null;
+        let optimizerUI = null;
+        
+        function startOptimizer() {
+            if (!optimizerManager) {
+                // Inicializar por primera vez
+                optimizerManager = new OptimizerManager('https://crypto-simulator-back.onrender.com');
+                optimizerUI = new OptimizerUI('optimizer-container');
+                optimizerManager.setUIRenderer(optimizerUI);
+                
+                optimizerManager.initialize().then(() => {
+                    optimizerManager.startAll();
+                    optimizerUI.startAutoUpdate(optimizerManager.bots, 2000);
+                    
+                    document.getElementById('optimizerStartBtn').disabled = true;
+                    document.getElementById('optimizerStopBtn').disabled = false;
+                });
+            } else {
+                // Ya existe, solo reiniciar
+                optimizerManager.startAll();
+                optimizerUI.startAutoUpdate(optimizerManager.bots, 2000);
+                
+                document.getElementById('optimizerStartBtn').disabled = true;
+                document.getElementById('optimizerStopBtn').disabled = false;
+            }
+        }
+        
+        function stopOptimizer() {
+            if (optimizerManager) {
+                optimizerManager.stopAll();
+                optimizerUI.stopAutoUpdate();
+                
+                document.getElementById('optimizerStartBtn').disabled = false;
+                document.getElementById('optimizerStopBtn').disabled = true;
+            }
+        }
+    </script>
+    
     <script src="app-backend.js"></script>
+    <script src="app-optimizer.js"></script>
+    <script src="optimizer-ui.js"></script>
 </body>
 </html>
